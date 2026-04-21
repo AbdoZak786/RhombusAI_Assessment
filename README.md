@@ -99,6 +99,22 @@ npm run test:headed    # UI in a headed browser
 npm run report         # Open the last HTML report
 ```
 
+**UI in a headed browser (direct Playwright CLI, no `npx` on PATH):**
+
+If `npx playwright` is not available, invoke the bundled CLI with Node from the repo root:
+
+```powershell
+# Windows (PowerShell / CMD)
+node node_modules\@playwright\test\cli.js test --project=ui --headed
+```
+
+```bash
+# macOS / Linux
+node node_modules/@playwright/test/cli.js test --project=ui --headed
+```
+
+**Manual step during the UI run:** When the flow reaches the Rhombus preview step, **click Preview** in the product UI. That is the only interaction you need to perform by hand; the rest of the pipeline (upload, prompt, status polling, download) is automated.
+
 Data validation (defaults to the CSVs next to the script):
 
 ```bash
