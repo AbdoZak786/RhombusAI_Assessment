@@ -1,0 +1,16 @@
+node_modules/
+.env
+.env.local
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+*.log
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+venv/
+.auth/
+.claude/
+
