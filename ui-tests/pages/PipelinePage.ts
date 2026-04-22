@@ -19,6 +19,10 @@ export class PipelinePage extends BasePage {
   private readonly runButton: Locator;
   private readonly status: Locator;
   private readonly downloadButton: Locator;
+  // Snapshot of how many preview (eye) buttons the canvas had BEFORE the
+  // pipeline was kicked off. Completion is signalled by a new output node
+  // appearing, i.e. this count increasing by 1.
+  private canvasEyeCountBeforeRun = 0;
 
   constructor(page: Page) {
     super(page);
@@ -631,7 +635,28 @@ export class PipelinePage extends BasePage {
     // Dismiss them by pressing Escape and click with a small retry.
     await this.page.keyboard.press("Escape").catch(() => {});
     await runCanvas.first().scrollIntoViewIfNeeded().catch(() => {});
+    // Snapshot the current preview-button count: the pipeline is done when
+    // a new output node (with its own eye icon) gets appended to the canvas.
+    this.canvasEyeCountBeforeRun = await this.canvasEyeButtons().count().catch(() => 0);
     await runCanvas.first().click({ force: true }).catch(() => {});
+  }
+
+  /**
+   * All per-node preview (eye) buttons currently rendered on the canvas.
+   * Both input and output nodes expose one; we use the delta in count as
+   * the completion signal rather than clicking eagerly.
+   *
+   * IMPORTANT: scoped to lucide eye SVGs only, and filtered to exclude the
+   * top-level "Preview" / "Canvas" / "Logs" tab buttons in the toolbar
+   * (those have visible tab text; node eyes are icon-only).
+   */
+  private canvasEyeButtons(): Locator {
+    return this.page
+      .locator("button:has(svg.lucide-eye), button:has(svg.lucide-eye-icon)")
+      .filter({
+        hasNotText:
+          /preview|canvas|logs|transform|schedule|profile|rhombo|builder/i,
+      });
   }
 
   /**
@@ -645,35 +670,58 @@ export class PipelinePage extends BasePage {
    * match loosely and would yield a false positive before the run starts.
    */
   async waitForPipelineCompleted(timeoutMs: number): Promise<void> {
-    const completedSignal = async (): Promise<boolean> => {
-      const byTestId = this.page.getByTestId(TestIds.pipelineStatus);
-      if (await byTestId.count()) {
-        const focused = (await byTestId.first().textContent())?.trim() ?? "";
-        if (completedMatcher.test(focused)) {
-          return true;
-        }
-      }
-      const download = this.downloadButton.first();
-      if (
-        (await download.isVisible().catch(() => false)) &&
-        (await download.isEnabled().catch(() => false))
-      ) {
-        return true;
-      }
-      return false;
-    };
+    // STAY on the canvas while the pipeline runs. The authoritative
+    // completion signal is that a NEW output node gets appended — i.e.
+    // the canvas goes from N eye buttons (just the input) to N+1 (input
+    // + cleaned output). We only need to wait; no clicks yet.
+    const baseline = this.canvasEyeCountBeforeRun;
+    const eyes = this.canvasEyeButtons();
 
     await expect
-      .poll(completedSignal, {
-        timeout: timeoutMs,
-        intervals: [500, 1_000, 2_000, 3_000],
-        message:
-          "Pipeline did not reach a completed state within the budget (no completed status, no enabled Download button)",
-      })
+      .poll(
+        async () => {
+          if (
+            (await this.downloadButton.first().isVisible().catch(() => false)) &&
+            (await this.downloadButton.first().isEnabled().catch(() => false))
+          ) {
+            return true;
+          }
+          const current = await eyes.count().catch(() => 0);
+          return current > baseline;
+        },
+        {
+          timeout: timeoutMs,
+          intervals: [1_000, 2_000, 3_000, 5_000],
+          message: `Pipeline did not complete: no new output node appeared on the canvas (eye count still ≤ ${baseline}).`,
+        },
+      )
       .toBeTruthy();
   }
 
   async expectDownloadEnabled(): Promise<void> {
+    // Open the NEW output node's preview once (not the input's). The new
+    // node is the one appended after canvasEyeCountBeforeRun, i.e. the
+    // last eye button in DOM order.
+    if (
+      !(
+        (await this.downloadButton.first().isVisible().catch(() => false)) &&
+        (await this.downloadButton.first().isEnabled().catch(() => false))
+      )
+    ) {
+      const eyes = this.canvasEyeButtons();
+      const total = await eyes.count();
+      if (total > this.canvasEyeCountBeforeRun && total > 0) {
+        const newest = eyes.nth(total - 1);
+        // Hover the enclosing node card first — actions on react-flow nodes
+        // are often gated on node-level hover even when the button itself is
+        // already painted.
+        const card = newest.locator("xpath=ancestor::*[self::div or self::article][1]");
+        await card.hover({ force: true }).catch(() => {});
+        await newest.scrollIntoViewIfNeeded().catch(() => {});
+        await newest.hover().catch(() => {});
+        await newest.click({ force: true }).catch(() => {});
+      }
+    }
     await expect(this.downloadButton).toBeEnabled({ timeout: 30_000 });
   }
 }
