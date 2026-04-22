@@ -182,9 +182,7 @@ On `rhombusai.com` you will see `POST`s to paths like `/ph-rhombus/s/` — that 
 - **TypeScript can't find `tsc`.** Run `node node_modules/typescript/bin/tsc -p . --noEmit` (the repo ships a local TypeScript).
 
 ## Demo Video Link
-
-_Replace this line with a link to the walkthrough recording (e.g. unlisted Loom or internal share)._
-
+(https://drive.google.com/file/d/1r_TfRgTdswV8ySvwu-1RlNjaHTuIJEC9/view?usp=sharing)
 ---
 
 **Note:** Public marketing pages may differ from the authenticated product experience. Update `E2E_LOGIN_PATH`, `E2E_PIPELINE_PATH`, and selectors as needed once you confirm the live DOM inside your Rhombus AI workspace.
